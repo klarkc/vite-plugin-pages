@@ -1,4 +1,24 @@
-"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }// src/index.ts
+"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, {enumerable: true, configurable: true, writable: true, value}) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+
+// src/index.ts
 var _path = require('path');
 
 // src/files.ts
@@ -137,25 +157,34 @@ function replaceSquareBrackets(bundle) {
 }
 
 // src/files.ts
+function getIgnore(exclude) {
+  return ["node_modules", ".git", "**/__*__/**", ...exclude];
+}
+async function getPageDirs(pageDirOptions, options) {
+  const {exclude} = options;
+  const dirs = await _fastglob2.default.call(void 0, pageDirOptions.dir, {
+    ignore: getIgnore(exclude),
+    onlyDirectories: true,
+    dot: true,
+    unique: true
+  });
+  const pageDirs = dirs.map((dir) => __spreadProps(__spreadValues({}, pageDirOptions), {
+    dir
+  }));
+  return pageDirs;
+}
 async function getPageFiles(path, options) {
   const {
     extensions,
     exclude
   } = options;
   const ext = extensionsToGlob(extensions);
-  const ignore = ["node_modules", ".git", "**/__*__/**", ...exclude];
-  const cwds = await _fastglob2.default.call(void 0, path, {
-    ignore,
-    onlyDirectories: true,
-    dot: true,
-    unique: true
-  });
-  const nestedFiles = await Promise.all(cwds.map((cwd) => _fastglob2.default.call(void 0, `**/*.${ext}`, {
-    ignore,
+  const files = await _fastglob2.default.call(void 0, `**/*.${ext}`, {
+    ignore: getIgnore(exclude),
     onlyFiles: true,
-    cwd
-  })));
-  return nestedFiles.flat(1);
+    cwd: path
+  });
+  return files;
 }
 
 // src/generate.ts
@@ -434,13 +463,16 @@ function pagesPlugin(userOptions = {}) {
         return;
       if (!generatedRoutes) {
         generatedRoutes = [];
-        for (const pageDir of options.pagesDirOptions) {
-          const pageDirPath = slash(_path.resolve.call(void 0, options.root, pageDir.dir));
-          debug.gen("dir: %O", pageDirPath);
-          const files = await getPageFiles(pageDirPath, options);
-          debug.gen("files: %O", files);
-          const routes = generateRoutes(files, pageDir, options);
-          generatedRoutes.push(...routes);
+        for (const pageDirGlob of options.pagesDirOptions) {
+          const pageDirs = await getPageDirs(pageDirGlob, options);
+          for (const pageDir of pageDirs) {
+            const pageDirPath = slash(_path.resolve.call(void 0, options.root, pageDir.dir));
+            debug.gen("dir: %O", pageDirPath);
+            const files = await getPageFiles(pageDirPath, options);
+            debug.gen("files: %O", files);
+            const routes = generateRoutes(files, pageDir, options);
+            generatedRoutes.push(...routes);
+          }
         }
         generatedRoutes = generatedRoutes.sort((i) => isDynamicRoute(i.path) ? 1 : -1);
         const allRoute = generatedRoutes.find((i) => isCatchAllRoute(i.path));
