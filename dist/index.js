@@ -93,6 +93,7 @@ function slash(str) {
 }
 var debug = {
   hmr: _debug2.default.call(void 0, "vite-plugin-pages:hmr"),
+  sfc: _debug2.default.call(void 0, "vite-plugin-pages:sfc"),
   gen: _debug2.default.call(void 0, "vite-plugin-pages:gen")
 };
 var dynamicRouteRE = /^\[.+\]$/;
@@ -336,7 +337,7 @@ function isRouteBlockChanged(filePath, routes, options) {
     const route = findRouteByFilename(routes, filePath);
     if (route) {
       const before = Object.assign({}, route);
-      debug.hmr("custom block: %O", routeBlock);
+      debug.sfc("route: %O", routeBlock);
       Object.assign(route, routeBlock);
       return !_deepequal2.default.call(void 0, before, route);
     }
@@ -415,8 +416,16 @@ function pagesPlugin(userOptions = {}) {
   return {
     name: "vite-plugin-pages",
     enforce: "pre",
-    configResolved({root}) {
+    async configResolved({root}) {
       options.root = root;
+      let pageDirOptions = [];
+      for (const pageDirGlob of options.pagesDirOptions) {
+        pageDirOptions = [
+          ...pageDirOptions,
+          ...await getPageDirs(pageDirGlob, options)
+        ];
+      }
+      options.pagesDirOptions = pageDirOptions;
     },
     configureServer(server) {
       const {ws, watcher} = server;
@@ -463,16 +472,13 @@ function pagesPlugin(userOptions = {}) {
         return;
       if (!generatedRoutes) {
         generatedRoutes = [];
-        for (const pageDirGlob of options.pagesDirOptions) {
-          const pageDirs = await getPageDirs(pageDirGlob, options);
-          for (const pageDir of pageDirs) {
-            const pageDirPath = slash(_path.resolve.call(void 0, options.root, pageDir.dir));
-            debug.gen("dir: %O", pageDirPath);
-            const files = await getPageFiles(pageDirPath, options);
-            debug.gen("files: %O", files);
-            const routes = generateRoutes(files, pageDir, options);
-            generatedRoutes.push(...routes);
-          }
+        for (const pageDir of options.pagesDirOptions) {
+          const pageDirPath = slash(_path.resolve.call(void 0, options.root, pageDir.dir));
+          debug.gen("dir: %O", pageDirPath);
+          const files = await getPageFiles(pageDirPath, options);
+          debug.gen("files: %O", files);
+          const routes = generateRoutes(files, pageDir, options);
+          generatedRoutes.push(...routes);
         }
         generatedRoutes = generatedRoutes.sort((i) => isDynamicRoute(i.path) ? 1 : -1);
         const allRoute = generatedRoutes.find((i) => isCatchAllRoute(i.path));
